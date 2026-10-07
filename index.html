@@ -1,0 +1,353 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ZOMBIE TROUBLE</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><style>
+:root{--bg:#15171a;--pn:#202327;--ln:#3a3e44;--tx:#d9d4c7;--ac:#c8a02a;--rd:#b8402f;--gr:#6f9a5a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px Bahnschrift,"Segoe UI",sans-serif;overflow:hidden}
+#err{position:fixed;z-index:99;top:0;left:0;right:0;background:var(--rd);color:#fff;padding:8px}
+#screen{position:fixed;inset:0;overflow:auto;display:flex;flex-direction:column;align-items:center;padding:4vh 16px;background:repeating-linear-gradient(135deg,#15171a 0 22px,#181b1e 22px 44px)}
+h1.t{font:900 clamp(40px,8vw,84px)/1 Impact,sans-serif;letter-spacing:.04em;margin:0 0 6px;color:var(--ac);text-shadow:3px 3px 0 #000,-1px -1px 0 var(--rd)}
+.box{background:var(--pn);border:2px solid var(--ln);border-left:6px solid var(--ac);padding:20px;width:min(560px,100%);display:flex;flex-direction:column;gap:10px}.wide{width:min(980px,100%)}
+input,select,textarea{background:#101215;border:1px solid var(--ln);color:var(--tx);padding:10px;font:inherit;width:100%}label{font-size:13px;opacity:.75}
+button{background:#2b2f34;color:var(--tx);border:1px solid var(--ln);padding:10px 16px;font:700 14px inherit;cursor:pointer}button:hover{border-color:var(--ac)}
+button.p{background:var(--ac);color:#111}button.d{border-color:var(--rd);color:#e08a7c}.menu button{padding:14px;font-size:18px;text-align:left}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row>*{flex:1}.row>button{flex:0 0 auto}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.srv{display:grid;grid-template-columns:1fr auto;gap:8px;background:#1a1d20;border:1px solid var(--ln);padding:12px}.srv small{opacity:.65;display:block}.on{color:var(--gr)}
+#game{position:fixed;inset:0}#cv{display:block;width:100%;height:100%}
+#xh{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#fffc;box-shadow:0 0 0 1px #000;pointer-events:none}
+#hud{position:absolute;left:12px;top:12px;font-size:13px;pointer-events:none;text-shadow:1px 1px 2px #000;display:flex;flex-direction:column;gap:4px}
+.bar{width:190px;height:12px;background:#0008;border:1px solid #000}.bar i{display:block;height:100%}
+#hotbar{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:4px}
+.sl{width:54px;height:54px;background:#101215cc;border:2px solid var(--ln);position:relative;font-size:10px;display:flex;align-items:center;justify-content:center;text-align:center;user-select:none;cursor:pointer}
+.sl.on{border-color:var(--ac)}.sl.sel{outline:2px solid var(--gr)}.sl i{position:absolute;right:3px;bottom:2px;font-style:normal;font-size:12px;font-weight:700}.sl em{position:absolute;left:3px;top:1px;opacity:.5;font-style:normal}.sl u{position:absolute;left:0;bottom:0;height:3px;background:var(--gr)}
+#inv{position:absolute;top:6vh;left:50%;transform:translateX(-50%);background:#15171af2;border:2px solid var(--ac);padding:14px;width:min(560px,96vw);max-height:86vh;overflow:auto}
+#inv .g{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin:6px 0}#inv .sl{width:100%;height:46px}#inv button{display:block;width:100%;margin:3px 0;text-align:left}#inv button:disabled{opacity:.35}
+#chat{position:absolute;left:12px;bottom:12px;width:320px;text-shadow:1px 1px 2px #000;font-size:13px}#log{max-height:140px;overflow:hidden}
+#death,#pause{position:absolute;inset:0;background:#300c;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}#pause{background:#000a}
+#death h1{font:900 64px Impact,sans-serif;color:var(--rd);margin:0}[hidden]{display:none!important}
+</style></head><body>
+<div id="err" hidden></div><div id="screen"></div>
+<div id="game" hidden><canvas id="cv"></canvas><div id="xh"></div><div id="hud"></div><div id="hotbar"></div><div id="inv" hidden></div>
+<div id="chat"><div id="log"></div><input id="msg" maxlength="120" placeholder="Mensagem" hidden></div>
+<div id="death" hidden><h1>VOCÊ MORREU</h1><button class="p" id="resp">RENASCER</button></div>
+<div id="pause" hidden><div class="box"><h2>PAUSADO</h2><button id="pres">CONTINUAR</button><button class="d" id="pexit">SALVAR E SAIR</button></div></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import * as AU from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import * as FS from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import * as RT from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+const M_fb=(()=>{
+
+// Firebase: init, auth, perfis, servidores, personagem e mundo.
+const cfg={apiKey:"AIzaSyD128x6HDwY1lIfvPcIMTV8Z4FV4RZsluY",authDomain:"zumbia-caos.firebaseapp.com",projectId:"zumbia-caos",
+  storageBucket:"zumbia-caos.firebasestorage.app",messagingSenderId:"313061472117",appId:"1:313061472117:web:d114b23d8fd9117064c53c",
+  measurementId:"G-KMFWH7N3C5",databaseURL:"https://zumbia-caos-default-rtdb.firebaseio.com"};
+const app=initializeApp(cfg),auth=AU.getAuth(app),db=FS.getFirestore(app),rtdb=RT.getDatabase(app);
+const D=(...p)=>FS.doc(db,...p);
+let pending=Promise.resolve();
+const watch=f=>AU.onAuthStateChanged(auth,async u=>{await pending;if(u)await ensure(u);f(u)});
+const login=(e,p)=>AU.signInWithEmailAndPassword(auth,e,p);
+const loginGoogle=()=>AU.signInWithPopup(auth,new AU.GoogleAuthProvider());
+const logout=()=>AU.signOut(auth);
+const register=(e,p,n)=>pending=(async()=>{const r=await AU.createUserWithEmailAndPassword(auth,e,p);await AU.updateProfile(r.user,{displayName:n});await ensure(r.user,n)})();
+async function ensure(u,name){ // perfil criado uma vez; senha nunca vai ao Firestore
+  if((await FS.getDoc(D("users",u.uid))).exists())return;
+  await FS.setDoc(D("users",u.uid),{uid:u.uid,username:name||u.displayName||"Sobrevivente",email:u.email,createdAt:FS.serverTimestamp(),
+    level:1,xp:0,money:50,settings:{vol:.6},server:null,favorites:[],friends:[],stats:{kills:0,deaths:0,quests:0,created:0,hours:0}});
+}
+const getProfile=async uid=>(await FS.getDoc(D("users",uid))).data();
+const patchProfile=(uid,d)=>FS.updateDoc(D("users",uid),d);
+const hash=async s=>[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,"0")).join("");
+async function createServer(p,o){
+  const r=FS.doc(FS.collection(db,"servers")),seed=Math.floor(Math.random()*2**31);
+  await FS.setDoc(r,{id:r.id,ownerUid:p.uid,ownerName:p.username,name:o.name,desc:o.desc,private:o.private,passHash:o.private?await hash(o.pass):"",
+    max:o.max,settings:o.settings,seed,banned:[],createdAt:FS.serverTimestamp()});
+  await FS.setDoc(D("worlds",r.id),{seed,edits:{}});
+  await FS.updateDoc(D("users",p.uid),{"stats.created":FS.increment(1)});return r.id;
+}
+async function listServers(){
+  const l=(await FS.getDocs(FS.query(FS.collection(db,"servers"),FS.orderBy("createdAt","desc"),FS.limit(100)))).docs.map(d=>d.data());
+  await Promise.all(l.map(async s=>{try{s.online=(await RT.get(RT.ref(rtdb,`servers/${s.id}/players`))).size}catch{s.online=0}}));return l;
+}
+async function canJoin(s,uid,pass){
+  if(s.banned?.includes(uid))return"Você foi banido deste servidor.";
+  if(s.private&&await hash(pass||"")!==s.passHash)return"Senha incorreta.";
+  if(s.online>=s.max)return"Servidor lotado.";return null;
+}
+async function updateServer(id,d){if("pass"in d){d.passHash=d.pass?await hash(d.pass):"";d.private=!!d.pass;delete d.pass}return FS.updateDoc(D("servers",id),d)}
+const deleteServer=async id=>{await FS.deleteDoc(D("worlds",id));await FS.deleteDoc(D("servers",id))};
+const favorite=(uid,id,on)=>FS.updateDoc(D("users",uid),{favorites:on?FS.arrayUnion(id):FS.arrayRemove(id)});
+const loadWorld=async id=>(await FS.getDoc(D("worlds",id))).data()||{};
+const loadChar=async uid=>(await FS.getDoc(D("characters",uid))).data()||{};
+const saveWorld=(id,edits)=>FS.setDoc(D("worlds",id),{edits},{merge:true});
+async function saveChar(uid,sid,c){
+  await FS.setDoc(D("characters",uid),{...c,sid,inv:JSON.stringify(c.inv)},{merge:true});
+  await FS.updateDoc(D("users",uid),{xp:c.xp,level:c.level,money:c.money,server:sid,"stats.kills":c.kills,"stats.deaths":c.deaths});
+}
+
+return {FS,RT,db,rtdb,auth,watch,login,loginGoogle,logout,register,getProfile,patchProfile,createServer,listServers,canJoin,updateServer,deleteServer,favorite,loadWorld,loadChar,saveWorld,saveChar};
+})();
+const M_data=(()=>{
+
+// Itens, receitas e zumbis. Novo item = nova entrada em I; nova receita = R; novo zumbi = Z.
+const I={
+  sword:{n:"Espada",c:"#b8c0c8",dmg:14,dur:100,rng:2.6},pipe:{n:"Cano",c:"#8d949a",dmg:20,dur:60,rng:2.6},axe:{n:"Machado",c:"#a0522d",dmg:18,dur:80,rng:2.6},
+  wood:{n:"Madeira",c:"#8a5a2b",s:50},stone:{n:"Pedra",c:"#7b7f84",s:50},scrap:{n:"Sucata",c:"#6a6f55",s:50},cloth:{n:"Tecido",c:"#9a8fb0",s:50},
+  bread:{n:"Pão",c:"#c9a063",s:10,food:25},canned:{n:"Enlatado",c:"#b3702f",s:10,food:40},water:{n:"Água",c:"#3f7fbf",s:10,water:35},
+  bandage:{n:"Bandagem",c:"#d8d2c4",s:10,heal:25},wall:{n:"Parede",c:"#8a6a3a",s:50,place:8}};
+const R=[
+  {cat:"Medicina",out:"bandage",n:1,in:{cloth:2}},{cat:"Armas",out:"pipe",n:1,in:{scrap:4}},
+  {cat:"Ferramentas",out:"axe",n:1,in:{wood:3,stone:2}},{cat:"Construção",out:"wall",n:2,in:{wood:4}}];
+const Z={common:{hp:40,sp:1.8,dmg:8,c:0x5f7a4f,xp:10},runner:{hp:25,sp:3.6,dmg:6,c:0x8a7a3a,xp:14},tank:{hp:130,sp:1.2,dmg:18,c:0x4a4a6a,xp:30}};
+// Loot contextual por região
+const LOOT={hospital:["bandage","bandage","water","cloth"],market:["bread","canned","water","canned"],industrial:["scrap","scrap","wood","stone"],
+  houses:["bread","cloth","wood","water","scrap"],military:["scrap","bandage","canned"]};
+
+return {I,R,Z,LOOT};
+})();
+const M_inv=(()=>{
+const {I}=M_data;
+const N=41; // 9 hotbar (0-8) + 32 mochila (9-40)
+class Inv{
+  constructor(s){this.slots=s&&s.length==N?s:Array(N).fill(null)}
+  add(id,n=1){const m=I[id].s||1;
+    for(const s of this.slots)if(n&&s&&s.id==id&&s.d==null&&s.n<m){const k=Math.min(m-s.n,n);s.n+=k;n-=k}
+    for(let i=0;i<N&&n;i++)if(!this.slots[i]){const k=Math.min(m,n);this.slots[i]={id,n:k};if(I[id].dur)this.slots[i].d=I[id].dur;n-=k}return n}
+  count(id){return this.slots.reduce((a,s)=>a+(s&&s.id==id?s.n:0),0)}
+  take(id,n){this.slots.forEach((s,i)=>{if(s&&s.id==id&&n){const k=Math.min(s.n,n);s.n-=k;n-=k;if(!s.n)this.slots[i]=null}})}
+  use(i,k=1){const s=this.slots[i];if(!s)return;s.n-=k;if(s.n<=0)this.slots[i]=null}
+  wear(i){const s=this.slots[i];if(!s||s.d==null)return false;if(--s.d<=0){this.slots[i]=null;return true}return false}
+  swap(a,b){if(a==b)return;const x=this.slots[a],y=this.slots[b];
+    if(x&&y&&x.id==y.id&&x.d==null){const k=Math.min((I[x.id].s||1)-y.n,x.n);y.n+=k;x.n-=k;if(!x.n)this.slots[a]=null;return}
+    this.slots[a]=y;this.slots[b]=x}
+  split(i){const s=this.slots[i];if(!s||s.n<2)return;const e=this.slots.findIndex(v=>!v);if(e<0)return;const h=s.n>>1;s.n-=h;this.slots[e]={id:s.id,n:h}}
+  drop(i){this.slots[i]=null}
+  can(r){return Object.entries(r.in).every(([k,v])=>this.count(k)>=v)}
+  craft(r){if(!this.can(r))return false;for(const [k,v] of Object.entries(r.in))this.take(k,v);this.add(r.out,r.n||1);return true}
+}
+
+return {N,Inv};
+})();
+const M_world=(()=>{
+
+// Mundo por seed: sempre o mesmo mundo inicial; edições dos jogadores ficam em `edits` (persistidas).
+// Tiles: 0 grama,1 rua,2 piso,3 parede,4 porta,5 loot,6 loot vazio,7 árvore,8 parede construída
+const B=14;
+const h2=(x,y,s)=>{let h=Math.imul(x*374761393+y*668265263+s|0,1274126177);h=Math.imul(h^h>>>13,1103515245);return((h^h>>>16)>>>0)/4294967296};
+const REGION={park:"Parque",hospital:"Hospital",market:"Supermercado",industrial:"Zona industrial",houses:"Bairro residencial",military:"Área militar"};
+class World{
+  constructor(seed,edits){this.seed=seed;this.e=new Map(Object.entries(edits||{}));this.dirty={}}
+  region(x,y){const bx=Math.floor(x/B),by=Math.floor(y/B),r=h2(bx,by,this.seed);
+    return Math.hypot(bx,by)>7&&r>.9?"military":r<.15?"park":r<.22?"hospital":r<.34?"market":r<.5?"industrial":"houses"}
+  gen(x,y){const m=v=>((v%B)+B)%B,lx=m(x),ly=m(y),reg=this.region(x,y),s=this.seed;
+    if(lx<2||ly<2)return 1;
+    if(reg=="park")return h2(x,y,s+1)<.14?7:0;
+    if(lx>=3&&lx<=B-2&&ly>=3&&ly<=B-2){
+      if(lx==3||lx==B-2||ly==3||ly==B-2)return(ly==B-2&&lx==7)?4:3;
+      return h2(x,y,s+2)<.09?5:2}
+    return h2(x,y,s+3)<.05?7:0}
+  tile(x,y){const k=x+","+y;return this.e.has(k)?this.e.get(k):this.gen(x,y)}
+  set(x,y,t){const k=x+","+y;this.e.set(k,t);this.dirty[k]=t}
+  solid(x,y){const t=this.tile(x,y);return t==3||t==5||t==7||t==8}
+}
+// Renderização 3D: InstancedMesh por tipo de tile, só ao redor do jogador (carregamento por região).
+class WorldView{
+  constructor(scene,world){this.w=world;this.R=26;this.cx=1e9;this.cz=1e9;
+    const box=(w,h,d)=>new THREE.BoxGeometry(w,h,d),mk=(g,c,y,n=3000)=>{const m=new THREE.InstancedMesh(g,new THREE.MeshLambertMaterial({color:c}),n);m.userData.y=y;m.frustumCulled=false;scene.add(m);return m};
+    this.m={1:mk(box(1,.1,1),0x33353a,.05),2:mk(box(1,.1,1),0x6a655a,.06),3:mk(box(1,3,1),0x4a4540,1.5),4:mk(box(1,.2,1),0x7a5a2e,.1),
+      5:mk(box(.8,.8,.8),0xc9a227,.4),6:mk(box(.8,.3,.8),0x3d3a35,.15),7:mk(new THREE.ConeGeometry(.7,2.6,6),0x1f4a26,1.3),8:mk(box(1,2.4,1),0x8a6a3a,1.2)};
+    const g=new THREE.Mesh(new THREE.PlaneGeometry(400,400).rotateX(-Math.PI/2),new THREE.MeshLambertMaterial({color:0x2d3a2a}));scene.add(g);this.ground=g}
+  update(px,pz,force){const cx=Math.round(px),cz=Math.round(pz);
+    this.ground.position.set(cx,0,cz);if(!force&&cx==this.cx&&cz==this.cz)return;this.cx=cx;this.cz=cz;
+    const n={},o=new THREE.Object3D(),R=this.R;for(const k in this.m)n[k]=0;
+    for(let x=cx-R;x<=cx+R;x++)for(let z=cz-R;z<=cz+R;z++){const t=this.w.tile(x,z),m=this.m[t];if(!m)continue;
+      o.position.set(x,m.userData.y,z);o.updateMatrix();m.setMatrixAt(n[t]++,o.matrix)}
+    for(const k in this.m){this.m[k].count=n[k];this.m[k].instanceMatrix.needsUpdate=true}}
+}
+
+return {B,REGION,World,WorldView};
+})();
+const M_game=(()=>{
+const {I,R,Z,LOOT}=M_data;const {World,WorldView,REGION}=M_world;const {Inv}=M_inv;const FB=M_fb;
+// Jogo 3D: jogador, câmera, zumbis, combate, construção, fome/sede, dia/noite, multiplayer, chat, salvamento.
+const {RT,rtdb}=FB,$=s=>document.querySelector(s);
+const MULT={zq:{baixa:.5,normal:1,alta:1.8,hordas:3},dif:{facil:.6,normal:1,dificil:1.5,apocalipse:2.2},night:{curta:.6,normal:1,longa:1.6}};
+const lvlOf=xp=>1+Math.floor(Math.sqrt(xp/50));
+const char=c=>{const g=new THREE.Group(),m=new THREE.MeshLambertMaterial({color:c});
+  const b=new THREE.Mesh(new THREE.BoxGeometry(.6,.9,.35),m);b.position.y=.9;const h=new THREE.Mesh(new THREE.BoxGeometry(.4,.4,.4),new THREE.MeshLambertMaterial({color:0xd8b08c}));h.position.y=1.55;
+  const a=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,.9),new THREE.MeshLambertMaterial({color:0xaaaaaa}));a.position.set(.4,1,.5);g.add(b,h,a);return g};
+
+async function startGame(user,prof,srv,onExit){
+  const err=m=>{$("#err").hidden=false;$("#err").textContent="Erro: "+m};
+  const [wd,c]=await Promise.race([Promise.all([FB.loadWorld(srv.id),FB.loadChar(user.uid)]),new Promise((_,j)=>setTimeout(()=>j(new Error("Tempo esgotado ao carregar. Confira Firestore e regras.")),15000))]);
+  const S=srv.settings||{},zq=MULT.zq[S.zombies]??1,dm=MULT.dif[S.difficulty]??1,nl=MULT.night[S.night]??1;
+  const world=new World(wd.seed??srv.seed,wd.edits),inv=new Inv(c.sid==srv.id&&c.inv?JSON.parse(c.inv):null);
+  if(!inv.slots.some(Boolean))inv.add("sword");
+  const p=c.sid==srv.id?{x:c.x||0,z:c.z||0,hp:c.hp||100,food:c.food??100,water:c.water??100}:{x:0,z:0,hp:100,food:100,water:100};
+  Object.assign(p,{xp:c.xp||0,money:c.money??50,kills:c.kills||0,deaths:c.deaths||0,face:0,sel:0,cd:0,dead:false});
+  if(p.hp<=0)p.hp=100;
+  // cena
+  const cv=$("#cv"),r=new THREE.WebGLRenderer({canvas:cv,antialias:true}),sc=new THREE.Scene(),cam=new THREE.PerspectiveCamera(55,1,.1,200);
+  const amb=new THREE.AmbientLight(0xffffff,.6),sun=new THREE.DirectionalLight(0xffffff,.8);sun.position.set(20,40,10);sc.add(amb,sun);
+  const view=new WorldView(sc,world),me=char(0x3a6ea5);sc.add(me);
+  let zoom=1,fp=false,pitch=.15,zs=[],others={},omesh={},msgs=[],clock=.3,run=true,open=false,sel=null,mouse={x:0,y:0},keys={};
+  const resize=()=>{r.setSize(innerWidth,innerHeight,false);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()};resize();addEventListener("resize",resize);
+  // multiplayer (Realtime DB, ~5 Hz)
+  const base=`servers/${srv.id}`,meRef=RT.ref(rtdb,`${base}/players/${user.uid}`),un=[];
+  try{await RT.set(meRef,{n:prof.username,x:p.x,z:p.z,f:0});RT.onDisconnect(meRef).remove();
+    un.push(RT.onValue(RT.ref(rtdb,`${base}/players`),s=>{const o={};s.forEach(ch=>{if(ch.key!=user.uid)o[ch.key]=ch.val()});others=o}));
+    un.push(RT.onChildAdded(RT.query(RT.ref(rtdb,`${base}/chat`),RT.limitToLast(15)),s=>{const v=s.val();say(`${v.n}: ${v.t}`)}))}catch(e){err("Realtime DB: "+e.message)}
+  const say=t=>{msgs.push(t);msgs=msgs.slice(-8);$("#log").innerHTML=msgs.map(m=>`<div>${m.replace(/</g,"&lt;")}</div>`).join("")};
+  // UI
+  const slot=(i,k)=>{const s=inv.slots[i],it=s&&I[s.id];return `<div class="sl ${i==p.sel&&k=="h"?"on":""} ${i===sel?"sel":""}" data-i="${i}" style="${it?`box-shadow:inset 0 -5px 0 ${it.c}`:""}">${k=="h"?`<em>${i+1}</em>`:""}${it?`<b>${it.n}</b>`:""}${s&&s.n>1?`<i>${s.n}</i>`:""}${s&&s.d!=null?`<u style="width:${100*s.d/I[s.id].dur}%"></u>`:""}</div>`};
+  const drawHot=()=>{$("#hotbar").innerHTML=[...Array(9)].map((_,i)=>slot(i,"h")).join("")};
+  const drawInv=()=>{drawHot();if(!open)return;
+    $("#inv").innerHTML=`<b>HOTBAR (9)</b><div class="g">${[...Array(9)].map((_,i)=>slot(i,"i")).join("")}</div><b>MOCHILA (32)</b><div class="g">${[...Array(32)].map((_,i)=>slot(i+9,"i")).join("")}</div>
+    <small>Clique: mover/trocar · Shift+clique: dividir · Botão direito: usar · Q: descartar selecionado</small><b>CRAFTING</b>${R.map((x,i)=>`<button data-r="${i}" ${inv.can(x)?"":"disabled"}>[${x.cat}] ${I[x.out].n} ×${x.n} ← ${Object.entries(x.in).map(([k,v])=>I[k].n+" "+inv.count(k)+"/"+v).join(", ")}</button>`).join("")}`};
+  const useSlot=i=>{const s=inv.slots[i];if(!s)return;const it=I[s.id];
+    if(it.food){p.food=Math.min(100,p.food+it.food);inv.use(i)}else if(it.water){p.water=Math.min(100,p.water+it.water);inv.use(i)}else if(it.heal){p.hp=Math.min(100,p.hp+it.heal);inv.use(i)}drawInv()};
+  $("#inv").onclick=e=>{const b=e.target.closest("[data-r]");if(b){inv.craft(R[+b.dataset.r]);return drawInv()}
+    const s=e.target.closest("[data-i]");if(!s)return;const i=+s.dataset.i;if(e.shiftKey){inv.split(i)}else if(sel===null)sel=inv.slots[i]?i:null;else{inv.swap(sel,i);sel=null}drawInv()};
+  $("#inv").oncontextmenu=e=>{e.preventDefault();const s=e.target.closest("[data-i]");if(s)useSlot(+s.dataset.i)};
+  $("#hotbar").onclick=e=>{const s=e.target.closest("[data-i]");if(s){p.sel=+s.dataset.i;drawHot()}};
+  const hud=()=>{const b=(v,c)=>`<div class="bar"><i style="width:${Math.max(0,v)}%;background:${c}"></i></div>`,hh=Math.floor(clock*24);
+    $("#hud").innerHTML=`<b>${prof.username} · Nv ${lvlOf(p.xp)} · $${p.money}</b>${b(p.hp,"#b8402f")}${b(p.food,"#c9a063")}${b(p.water,"#3f7fbf")}${b((p.xp-50*(lvlOf(p.xp)-1)**2)/(50*(2*lvlOf(p.xp)-1))*100,"#c8a02a")}
+    <span>${String(hh).padStart(2,"0")}:00 ${isNight()?"🌙":"☀"} · ${REGION[world.region(Math.round(p.x),Math.round(p.z))]} · Jogadores: ${Object.keys(others).length+1}/${srv.max}</span>`};
+  const isNight=()=>clock<.22||clock>.78;
+  drawInv();
+  // entrada
+  const onKey=(e,v)=>{if(document.activeElement==$("#msg"))return;keys[e.code]=v};
+  const kd=e=>{const m=$("#msg");
+    if(document.activeElement==m){if(e.key=="Enter"){const t=m.value.trim();if(t)RT.push(RT.ref(rtdb,`${base}/chat`),{uid:user.uid,n:prof.username,t,ts:Date.now()}).catch(()=>{});m.value="";m.hidden=true;m.blur()}if(e.key=="Escape"){m.hidden=true;m.blur()}return}
+    onKey(e,true);if(p.dead)return;
+    if(e.code=="KeyV")fp=!fp;
+    if(e.code=="KeyE"){open=!open;if(open)document.exitPointerLock();$("#inv").hidden=!open;sel=null;drawInv()}
+    if(e.code=="KeyQ"&&open&&sel!==null){inv.drop(sel);sel=null;drawInv()}
+    if(e.key=="Enter"){m.hidden=false;document.exitPointerLock();m.focus();e.preventDefault()}
+    if(/^[1-9]$/.test(e.key)){p.sel=+e.key-1;drawHot()}
+    if(e.code=="BracketRight")zoom=Math.min(2,zoom+.1);if(e.code=="BracketLeft")zoom=Math.max(.5,zoom-.1);
+    if(e.code=="Escape"){if(open){open=false;$("#inv").hidden=true}else $("#pause").hidden=!$("#pause").hidden}};
+  const ku=e=>onKey(e,false),mm=e=>{if(document.pointerLockElement){p.face-=e.movementX*.0025;pitch=Math.max(-1.2,Math.min(1.2,pitch-e.movementY*.0025))}},
+    wh=e=>{p.sel=(p.sel+(e.deltaY>0?1:8))%9;drawHot()},
+    md=e=>{if(p.dead||open||e.target!=cv)return;if(!document.pointerLockElement)return cv.requestPointerLock();e.button==0?attack():place()};
+  addEventListener("keydown",kd);addEventListener("keyup",ku);addEventListener("mousemove",mm);addEventListener("wheel",wh);addEventListener("mousedown",md);cv.oncontextmenu=e=>e.preventDefault();document.onpointerlockchange=()=>{if(!document.pointerLockElement&&run&&!open&&!p.dead&&$("#msg").hidden&&$("#pause").hidden)$("#pause").hidden=false};
+  // física simples por eixos
+  const free=(x,z,rd)=>![[-rd,-rd],[rd,-rd],[-rd,rd],[rd,rd]].some(([a,b])=>world.solid(Math.round(x+a),Math.round(z+b)));
+  const move=(e,dx,dz,rd=.35)=>{if(free(e.x+dx,e.z,rd))e.x+=dx;if(free(e.x,e.z+dz,rd))e.z+=dz;return};
+  const tgt=()=>({x:Math.round(p.x+Math.sin(p.face)*1.4),z:Math.round(p.z+Math.cos(p.face)*1.4)});
+  function gain(xp){const o=lvlOf(p.xp);p.xp+=xp;if(lvlOf(p.xp)>o)say(`★ Nível ${lvlOf(p.xp)}!`)}
+  let noise=null;
+  function attack(){if(p.cd>0)return;const s=inv.slots[p.sel],it=s&&I[s.id],dmg=it?.dmg||4,rng=it?.rng||1.6;p.cd=.45;noise={x:p.x,z:p.z,t:4};hit=.2;
+    let any=false;for(const z of zs){const dx=z.x-p.x,dz=z.z-p.z,d=Math.hypot(dx,dz);
+      if(d<rng&&(dx*Math.sin(p.face)+dz*Math.cos(p.face))/(d||1)>.3){z.hp-=dmg;z.x+=dx/(d||1)*.6;z.z+=dz/(d||1)*.6;any=true}}
+    if(any&&it?.dur&&inv.wear(p.sel)){say("Sua arma quebrou!")}
+    if(!any){const t=tgt(),k=world.tile(t.x,t.z);
+      if(k==5){const l=LOOT[world.region(t.x,t.z)]||LOOT.houses;for(let i=0;i<1+(Math.random()*(S.loot=="alta"?3:2)|0);i++){const id=l[Math.random()*l.length|0];inv.add(id);say("+ "+I[id].n)}world.set(t.x,t.z,6);view.update(p.x,p.z,true)}
+      else if(k==8){world.set(t.x,t.z,2);inv.add("wall");view.update(p.x,p.z,true)}
+      else if(k==7){inv.add("wood",2);world.set(t.x,t.z,0);say("+ 2 Madeira");view.update(p.x,p.z,true)}}
+    drawInv()}
+  function place(){const s=inv.slots[p.sel],it=s&&I[s.id];if(!it?.place)return useSlot(p.sel);const t=tgt();
+    if(world.solid(t.x,t.z)||[1,4].includes(world.tile(t.x,t.z))||(Math.round(p.x)==t.x&&Math.round(p.z)==t.z))return;
+    world.set(t.x,t.z,it.place);inv.use(p.sel);view.update(p.x,p.z,true);drawInv()}
+  // zumbis (IA: ouvem ruído, patrulham, perseguem contornando obstáculos)
+  const spawn=()=>{const night=isNight(),cap=Math.round((night?14:5)*zq);if(zs.length>=cap)return;
+    const a=Math.random()*6.28,d=18+Math.random()*8,x=p.x+Math.cos(a)*d,z=p.z+Math.sin(a)*d;if(!free(x,z,.4))return;
+    const q=Math.random(),type=q<.12?"tank":q<(night?.45:.3)?"runner":"common",def=Z[type],m=char(def.c);m.scale.setScalar(type=="tank"?1.3:1);sc.add(m);
+    zs.push({x,z,type,hp:def.hp,m,def,cd:0,wa:Math.random()*6.28,wt:0})};
+  function zAI(z,dt){const d=Math.hypot(p.x-z.x,p.z-z.z),heard=noise&&Math.hypot(noise.x-z.x,noise.z-z.z)<22;let tx,tz,sp=z.def.sp;
+    if(!p.dead&&d<(isNight()?16:11)){tx=p.x;tz=p.z}else if(heard){tx=noise.x;tz=noise.z;sp*=.8}else{z.wt-=dt;if(z.wt<=0){z.wa+=(Math.random()-.5)*2;z.wt=1+Math.random()*2}tx=z.x+Math.cos(z.wa)*5;tz=z.z+Math.sin(z.wa)*5;sp*=.4}
+    let a=Math.atan2(tz-z.z,tx-z.x),dx=Math.cos(a)*sp*dt,dz=Math.sin(a)*sp*dt,ox=z.x,oz=z.z;move(z,dx,dz,.4);
+    if(Math.hypot(z.x-ox,z.z-oz)<sp*dt*.3){a+=Math.PI/2*(z.wa>0?1:-1);move(z,Math.cos(a)*sp*dt,Math.sin(a)*sp*dt,.4);z.wa=-z.wa}   // contorna obstáculo
+    z.m.position.set(z.x,0,z.z);z.m.rotation.y=Math.PI/2-a;z.cd-=dt;
+    if(d<1.1&&z.cd<=0&&!p.dead){z.cd=1;const arm=0;p.hp-=z.def.dmg*dm;if(p.hp<=0){p.hp=0;p.dead=true;p.deaths++;($("#death").hidden=false,document.exitPointerLock())}}}
+  $("#resp").onclick=()=>{p.hp=100;p.food=60;p.water=60;p.x=0;p.z=0;p.dead=false;$("#death").hidden=true;zs.forEach(z=>sc.remove(z.m));zs=[];save()};
+  // salvamento (não a cada frame)
+  const save=async()=>{try{await FB.saveChar(user.uid,srv.id,{x:Math.round(p.x),z:Math.round(p.z),hp:Math.round(p.hp),food:Math.round(p.food),water:Math.round(p.water),xp:p.xp,level:lvlOf(p.xp),money:p.money,kills:p.kills,deaths:p.deaths,inv:inv.slots});
+    if(Object.keys(world.dirty).length){const d={...world.dirty};world.dirty={};await FB.saveWorld(srv.id,d)}}catch(e){err("Falha ao salvar: "+e.message)}};
+  const si=setInterval(save,20000),pi=setInterval(()=>RT.update(meRef,{x:+p.x.toFixed(2),z:+p.z.toFixed(2),f:+p.face.toFixed(2)}).catch(()=>{}),200);
+  const stop=async(exit)=>{run=false;document.onpointerlockchange=null;document.exitPointerLock();clearInterval(si);clearInterval(pi);un.forEach(f=>f());removeEventListener("keydown",kd);removeEventListener("keyup",ku);removeEventListener("mousemove",mm);removeEventListener("wheel",wh);removeEventListener("mousedown",md);removeEventListener("resize",resize);
+    await save();try{await RT.remove(meRef)}catch{}r.dispose();$("#game").hidden=true;$("#pause").hidden=true;if(exit)onExit()};
+  $("#pres").onclick=()=>{$("#pause").hidden=true;cv.requestPointerLock()};$("#pexit").onclick=()=>stop(true);
+  addEventListener("beforeunload",()=>{save();RT.remove(meRef)});
+  // loop
+  const ray=new THREE.Raycaster(),gp=new THREE.Plane(new THREE.Vector3(0,1,0),0),hv=new THREE.Vector3();let last=performance.now(),acc=0,hit=0,st=0;
+  $("#game").hidden=false;$("#screen").innerHTML="";view.update(p.x,p.z,true);
+  (function loop(now){if(!run)return;requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/1e3);last=now;
+    if(!$("#pause").hidden)return r.render(sc,cam);
+    if(!p.dead){let mx=(keys.KeyD?1:0)-(keys.KeyA?1:0),mz=(keys.KeyS?1:0)-(keys.KeyW?1:0);const l=Math.hypot(mx,mz)||1,sp=(keys.ShiftLeft?6:4)*dt;
+      {const fx=Math.sin(p.face),fz=Math.cos(p.face),fw=-mz/l,sd=mx/l;move(p,(fx*fw-fz*sd)*sp,(fz*fw+fx*sd)*sp)}if(mx||mz)noise=noise||(keys.ShiftLeft?{x:p.x,z:p.z,t:.3}:null)}
+    p.cd-=dt;hit-=dt;clock=(clock+dt/(240*nl))%1;
+    p.food-=dt*.12;p.water-=dt*.17;if(p.food<=0||p.water<=0){p.food=Math.max(0,p.food);p.water=Math.max(0,p.water);if(!p.dead){p.hp-=dt*1.5;if(p.hp<=0){p.hp=0;p.dead=true;p.deaths++;($("#death").hidden=false,document.exitPointerLock())}}}
+    else if(p.hp<100&&!p.dead)p.hp+=dt*(S.regen=="dificil"?.1:.4);
+    if(noise&&(noise.t-=dt)<=0)noise=null;
+    
+    me.position.set(p.x,0,p.z);me.rotation.y=p.face;me.children[2].rotation.x=hit>0?-.9:0;me.visible=!p.dead&&!fp;
+    acc+=dt;if(acc>1.5){acc=0;spawn()}
+    zs=zs.filter(z=>{if(z.hp<=0){sc.remove(z.m);p.kills++;gain(z.def.xp);if(Math.random()<.35)inv.add(["cloth","scrap","bread"][Math.random()*3|0]);drawInv();return false}
+      if(Math.hypot(z.x-p.x,z.z-p.z)>45){sc.remove(z.m);return false}zAI(z,dt);return true});
+    for(const id in others){const o=others[id];let m=omesh[id];if(!m){m=omesh[id]=char(0xa5503a);sc.add(m)}m.position.x+=(o.x-m.position.x)*.2;m.position.z+=(o.z-m.position.z)*.2;m.rotation.y=o.f}
+    for(const id in omesh)if(!others[id]){sc.remove(omesh[id]);delete omesh[id]}
+    // câmera 3D suave + dia/noite + chuva de névoa
+    {const cp=Math.cos(pitch),dx=Math.sin(p.face)*cp,dy=Math.sin(pitch),dz=Math.cos(p.face)*cp,d=fp?0:4*zoom;cam.position.set(p.x-dx*d,Math.max(.4,1.6-dy*d+(fp?0:.5)),p.z-dz*d);cam.lookAt(p.x+dx*5,1.6+dy*5,p.z+dz*5)}
+    const day=Math.max(.12,Math.sin(clock*Math.PI*2-Math.PI/2)*.5+.5),col=new THREE.Color().setHSL(.6,.3,.04+day*.38);
+    sc.background=col;sc.fog=new THREE.Fog(col,12,28);amb.intensity=.15+day*.6;sun.intensity=.1+day*.8;
+    if(++st%6==0){view.update(p.x,p.z);hud()}
+    r.render(sc,cam)})(last);
+  say(`Bem-vindo a ${srv.name}. WASD mover · clique na tela trava o mouse · V alterna 1ª/3ª pessoa · clique esq atacar/coletar · dir construir/usar · E mochila · Enter chat`);
+  return stop;
+}
+
+return {startGame};
+})();
+const M_main=(()=>{
+const FB=M_fb;const {startGame}=M_game;
+// Telas: login, menu, servidores, criar servidor, perfil, configurações.
+const $=s=>document.querySelector(s),scr=h=>{$("#screen").innerHTML=`<h1 class="t">ZOMBIE TROUBLE</h1>${h}`};
+const fail=e=>alert(String(e?.message||e).replace("Firebase: ","").trim());
+addEventListener("error",e=>{$("#err").hidden=false;$("#err").textContent="Erro: "+e.message});
+addEventListener("unhandledrejection",e=>{$("#err").hidden=false;$("#err").textContent="Erro: "+(e.reason?.message||e.reason)});
+let U,P;const refresh=async()=>P=await FB.getProfile(U.uid);
+const f=(id,l,t="text",x="")=>`<div><label>${l}</label><input id="${id}" type="${t}" ${x}></div>`;
+const sel=(id,l,o)=>`<div><label>${l}</label><select id="${id}">${o.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>`;
+function loginScreen(reg){scr(`<div class="box"><h2>${reg?"CRIAR CONTA":"ENTRAR"}</h2>${reg?f("nm","Nome do jogador"):""}${f("em","Email","email")}${f("pw","Senha","password")}${reg?f("pw2","Confirmar senha","password"):""}
+  <button class="p" id="go">${reg?"Criar conta":"Entrar"}</button>${reg?"":`<button id="gg">Entrar com Google</button>`}<button id="sw">${reg?"Já tenho conta":"Criar conta"}</button></div>`);
+  $("#sw").onclick=()=>loginScreen(!reg);if($("#gg"))$("#gg").onclick=()=>FB.loginGoogle().catch(fail);
+  $("#go").onclick=()=>{const e=$("#em").value.trim(),p=$("#pw").value;if(!reg)return FB.login(e,p).catch(fail);
+    const n=$("#nm").value.trim();if(n.length<3)return fail("Nome com ao menos 3 caracteres.");if(p!==$("#pw2").value)return fail("As senhas não conferem.");FB.register(e,p,n).catch(fail)}}
+async function menu(){await refresh();const xpn=50*P.level**2;
+  scr(`<div class="box"><b>👤 ${P.username} · Nível ${P.level} · XP ${P.xp}/${xpn} · $${P.money} · <span class="on">● online</span></b></div><br>
+  <div class="box menu"><button class="p" id="b1">JOGAR${P.server?" (último servidor)":""}</button><button id="b2">SERVIDORES</button><button id="b3">CRIAR SERVIDOR</button><button id="b4">PERFIL</button><button id="b5">CONFIGURAÇÕES</button><button class="d" id="b6">SAIR</button></div>`);
+  $("#b1").onclick=async()=>{try{if(P.server){const s=(await FB.listServers()).find(x=>x.id==P.server);if(s)return join(s)}servers()}catch(e){fail(e)}};
+  $("#b2").onclick=servers;$("#b3").onclick=()=>create();$("#b4").onclick=profile;$("#b5").onclick=settings;$("#b6").onclick=()=>FB.logout()}
+async function servers(){scr(`<div class="box wide"><div class="row"><input id="q" placeholder="Pesquisar servidor…"><select id="ord"><option value="p">Jogadores</option><option value="n">Nome</option><option value="r">Mais recentes</option><option value="f">Favoritos</option></select><button id="rf">ATUALIZAR</button><button id="bk">VOLTAR</button></div><div id="ls">Carregando…</div></div>`);
+  $("#bk").onclick=menu;let L=[];const draw=()=>{const q=$("#q").value.toLowerCase(),o=$("#ord").value,fv=P.favorites||[];
+    const l=L.filter(s=>s.name.toLowerCase().includes(q)).sort((a,b)=>o=="p"?b.online-a.online:o=="n"?a.name.localeCompare(b.name):o=="f"?fv.includes(b.id)-fv.includes(a.id):(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+    $("#ls").innerHTML=l.map(s=>`<div class="srv"><div><b>${fv.includes(s.id)?"★ ":""}${s.name.replace(/</g,"&lt;")}</b> ${s.private?"🔒":""}<small>${(s.desc||"").replace(/</g,"&lt;")}</small>
+      <small>Dono: ${s.ownerName} · ${s.online}/${s.max} jogadores · ${s.settings.difficulty} · <span class="on">● ativo</span> · ${s.createdAt?.toDate?.().toLocaleDateString()||""}</small></div>
+      <div class="row"><button class="p" data-j="${s.id}">ENTRAR</button><button data-f="${s.id}">FAVORITAR</button>${s.ownerUid==U.uid?`<button data-e="${s.id}">EDITAR</button><button class="d" data-x="${s.id}">EXCLUIR</button>`:""}</div></div>`).join("")||"Nenhum servidor."};
+  const load=async()=>{try{L=await FB.listServers();await refresh();draw()}catch(e){$("#ls").textContent="Erro: "+e.message}};
+  $("#q").oninput=draw;$("#ord").onchange=draw;$("#rf").onclick=load;
+  $("#ls").onclick=async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset,s=L.find(x=>x.id==(d.j||d.f||d.e||d.x));try{
+    if(d.j)join(s);if(d.f){await FB.favorite(U.uid,s.id,!(P.favorites||[]).includes(s.id));await load()}
+    if(d.x&&confirm(`Excluir "${s.name}" PERMANENTEMENTE?`)){await FB.deleteServer(s.id);await load()}
+    if(d.e){const n=prompt("Nome:",s.name);if(n===null)return;const ds=prompt("Descrição:",s.desc);const pw=prompt("Senha (vazio = público):","");const mx=prompt("Limite de jogadores:",s.max);
+      await FB.updateServer(s.id,{name:n,desc:ds,pass:pw||"",max:+mx||s.max});await load()}}catch(e){fail(e)}};load()}
+async function join(s){try{let pass="";if(s.private&&s.ownerUid!=U.uid)pass=prompt("Senha do servidor:")||"";
+  s.online=(await FB.listServers()).find(x=>x.id==s.id)?.online??0;const m=s.ownerUid==U.uid?null:await FB.canJoin(s,U.uid,pass);if(m)return fail(m);
+  await startGame(U,P,s,menu)}catch(e){fail(e);menu()}}
+function create(){scr(`<div class="box wide"><h2>CRIAR SERVIDOR</h2><div class="grid">${f("n","Nome")}${f("d","Descrição")}
+  ${sel("pv","Visibilidade",[["0","Público"],["1","Privado"]])}${f("pw","Senha (se privado)","password")}${sel("mx","Limite",[2,4,6,8,10,15,20].map(x=>[x,x]))}
+  ${sel("df","Dificuldade",[["facil","Fácil"],["normal","Normal"],["dificil","Difícil"],["apocalipse","Apocalipse"]])}${sel("pvp","PvP",[["0","Desligado"],["1","Ligado"]])}${sel("ff","Fogo amigo",[["0","Desligado"],["1","Ligado"]])}
+  ${sel("zb","Zumbis",[["baixa","Baixa"],["normal","Normal"],["alta","Alta"],["hordas","Hordas"]])}${sel("lt","Loot",[["baixa","Baixa"],["normal","Normal"],["alta","Alta"]])}
+  ${sel("nt","Duração da noite",[["curta","Curta"],["normal","Normal"],["longa","Longa"]])}${sel("cl","Clima",[["normal","Normal"],["variavel","Variável"],["extremo","Extremo"]])}
+  ${sel("rg","Regeneração",[["normal","Normal"],["dificil","Difícil"]])}${sel("cn","Construção",[["normal","Normal"],["livre","Livre"]])}</div>
+  <div class="row"><button class="p" id="ok">CRIAR</button><button id="bk">CANCELAR</button></div></div>`);
+  $("#bk").onclick=menu;$("#ok").onclick=async()=>{const n=$("#n").value.trim(),pv=$("#pv").value=="1",pw=$("#pw").value;if(n.length<3)return fail("Nome muito curto.");if(pv&&!pw)return fail("Servidor privado exige senha.");
+    try{await FB.createServer(P,{name:n,desc:$("#d").value,private:pv,pass:pw,max:+$("#mx").value,settings:{difficulty:$("#df").value,pvp:$("#pvp").value=="1",friendlyFire:$("#ff").value=="1",zombies:$("#zb").value,loot:$("#lt").value,night:$("#nt").value,weather:$("#cl").value,regen:$("#rg").value,build:$("#cn").value}});servers()}catch(e){fail(e)}}}
+function profile(){const s=P.stats||{};scr(`<div class="box"><h2>${P.username}</h2>Nível ${P.level} · XP ${P.xp} · $${P.money}<br>Zumbis derrotados: ${s.kills}<br>Mortes: ${s.deaths}<br>Missões: ${s.quests}<br>Servidores criados: ${s.created}<button id="bk">VOLTAR</button></div>`);$("#bk").onclick=menu}
+function settings(){scr(`<div class="box"><h2>CONFIGURAÇÕES</h2><label>Volume</label><input id="v" type="range" min="0" max="1" step=".05" value="${P.settings?.vol??.6}"><button class="p" id="ok">SALVAR</button><button id="bk">VOLTAR</button></div>`);
+  $("#bk").onclick=menu;$("#ok").onclick=async()=>{try{await FB.patchProfile(U.uid,{"settings.vol":+$("#v").value});menu()}catch(e){fail(e)}}}
+FB.watch(u=>{U=u;u?menu():loginScreen(false)});
+
+return {};
+})();
+</script></body></html>
